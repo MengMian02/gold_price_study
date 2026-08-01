@@ -1,0 +1,10 @@
+{
+  "input_file": "outputs/stage2_variable_construction/au9999_analysis_dataset.csv",
+  "training_observations": 3664,
+  "n_sim": 2000,
+  "block_length": 20,
+  "seed": 12345,
+  "any_threshold_outside_95_null_band": false,
+  "conclusion": "no link between level-proximity and next-day volatility (indistinguishable from mechanical null)",
+  "report": "outputs/stage5_level_proximity_volatility/level_proximity_volatility_report.md"
+}

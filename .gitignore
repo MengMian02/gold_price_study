@@ -1,0 +1,27 @@
+# Local/runtime folders
+work/
+.venv/
+__pycache__/
+*.pyc
+RMBGoldRoundNumberEffect/legacy_june_output/
+RMBGoldRoundNumberEffect/.venv/
+RMBGoldRoundNumberEffect/__pycache__/
+
+# Local OS/editor noise
+.DS_Store
+Thumbs.db
+
+# Source data is not redistributed.
+RMBGoldRoundNumberEffect/data/raw/
+
+# Row-level and diagnostic outputs may reproduce source observations.
+outputs/stage1_data_audit/
+outputs/stage2_5_anomaly_candidates/
+outputs/stage2_variable_construction/ANALYSIS_INPUT_NOTE.md
+outputs/stage2_variable_construction/analysis_dataset_manifest.json
+outputs/stage2_variable_construction/au9999_analysis_dataset.csv
+outputs/stage2_variable_construction/au9999_research_variables_stage2.csv
+outputs/stage2_variable_construction/construct_research_variables.py
+outputs/stage2_variable_construction/manual_verification_examples.csv
+outputs/stage2_variable_construction/variable_construction_validation_report.md
+outputs/stage3_distance_distribution/training_distance_data.csv

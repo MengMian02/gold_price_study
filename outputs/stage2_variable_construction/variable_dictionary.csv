@@ -1,0 +1,37 @@
+﻿variable_name,formula,input_fields,time_direction,missing_value_conditions,economic_meaning
+trade_date,parse(date),date,当日,日期无法解析,交易日期。
+open_price,numeric(open),open,当日,缺失或非数值,开盘价，人民币元/克。
+high_price,numeric(high),high,当日,缺失或非数值,最高价，人民币元/克。
+low_price,numeric(low),low,当日,缺失或非数值,最低价，人民币元/克。
+close_price,numeric(close),close,当日,缺失或非数值,收盘价，人民币元/克。
+volume_kg_raw,numeric(volume_kg),volume_kg,当日,缺失或非数值,成交量，千克。
+nearest_level,50 * floor(close_price / 50 + 0.5),close_price,当日,close_price 缺失,最近的50元整数关口；中点选择较高关口。
+signed_distance,close_price - nearest_level,"close_price, nearest_level",当日,任一输入缺失,收盘价相对最近关口的有符号距离。
+distance_to_level,abs(signed_distance),signed_distance,当日,signed_distance 缺失,收盘价离最近关口的绝对距离。
+near_2,1(distance_to_level <= 2),distance_to_level,当日,distance_to_level 缺失,是否位于最近关口2元以内。
+near_3,1(distance_to_level <= 3),distance_to_level,当日,distance_to_level 缺失,是否位于最近关口3元以内。
+near_5,1(distance_to_level <= 5),distance_to_level,当日,distance_to_level 缺失,主定义：是否位于最近关口5元以内。
+near_10,1(distance_to_level <= 10),distance_to_level,当日,distance_to_level 缺失,是否位于最近关口10元以内。
+side,below if signed_distance<0; above if >0; at_level if =0,signed_distance,当日,signed_distance 缺失,收盘价位于最近关口下方、上方或正好等于关口。
+side_near_5,side if near_5=1 else not_near,"side, near_5",当日,near_5 缺失,主定义范围内的方向；非near_5编码为not_near。
+log_return,ln(close_price / close_price_lag1),close_price,使用上一交易日，不用未来,首行或当前/上一收盘价无效,收盘到收盘对数收益率。
+abs_log_return,abs(log_return),log_return,当日,log_return 缺失,收益波动代理变量。
+parkinson_variance,(ln(high_price / low_price)^2) / (4 ln 2),"high_price, low_price",当日,"high<=0, low<=0, high<low 或缺失",Parkinson日内方差。
+parkinson_volatility,sqrt(parkinson_variance),parkinson_variance,当日,parkinson_variance 缺失,Parkinson日内波动率。
+log_volume,ln(1 + volume_kg_raw),volume_kg_raw,当日,volume缺失、非数值或负数,对数成交量。
+normal_log_volume_20d_lagged,mean(log_volume[t-20]...log_volume[t-1]),log_volume,仅使用过去20个交易日,不足20个有效历史成交量,滞后20日正常成交量基准。
+abnormal_volume_20d,log_volume - normal_log_volume_20d_lagged,"log_volume, normal_log_volume_20d_lagged",当日减历史基准,任一输入缺失,相对过去20个交易日基准的异常成交量。
+nearest_level_lag1,nearest_level[t-1],nearest_level,上一条交易日记录，不是自然日前一天,首行或上一交易日变量缺失,nearest_level 的一期滞后状态变量。
+signed_distance_lag1,signed_distance[t-1],signed_distance,上一条交易日记录，不是自然日前一天,首行或上一交易日变量缺失,signed_distance 的一期滞后状态变量。
+distance_to_level_lag1,distance_to_level[t-1],distance_to_level,上一条交易日记录，不是自然日前一天,首行或上一交易日变量缺失,distance_to_level 的一期滞后状态变量。
+near_2_lag1,near_2[t-1],near_2,上一条交易日记录，不是自然日前一天,首行或上一交易日变量缺失,near_2 的一期滞后状态变量。
+near_3_lag1,near_3[t-1],near_3,上一条交易日记录，不是自然日前一天,首行或上一交易日变量缺失,near_3 的一期滞后状态变量。
+near_5_lag1,near_5[t-1],near_5,上一条交易日记录，不是自然日前一天,首行或上一交易日变量缺失,near_5 的一期滞后状态变量。
+near_10_lag1,near_10[t-1],near_10,上一条交易日记录，不是自然日前一天,首行或上一交易日变量缺失,near_10 的一期滞后状态变量。
+side_lag1,side[t-1],side,上一条交易日记录，不是自然日前一天,首行或上一交易日变量缺失,side 的一期滞后状态变量。
+side_near_5_lag1,side_near_5[t-1],side_near_5,上一条交易日记录，不是自然日前一天,首行或上一交易日变量缺失,side_near_5 的一期滞后状态变量。
+prev_close_price,close_price[t-1],close_price,上一条交易日记录,首行,收益率人工核验中间变量。
+volume_history_count_20d_lagged,count(valid log_volume[t-20]...t-1),log_volume,仅使用过去,无,成交量基准窗口有效历史数量。
+parkinson_valid_input,1(high>0 and low>0 and high>=low),"high_price, low_price",当日,无,Parkinson输入是否有效。
+volume_valid_for_log,1(volume>=0 and numeric),volume_kg_raw,当日,无,成交量是否可取ln(1+volume)。
+variable_construction_flags,semicolon-separated rule flags,all inputs,当日或历史窗口,无,变量构造质量标记。

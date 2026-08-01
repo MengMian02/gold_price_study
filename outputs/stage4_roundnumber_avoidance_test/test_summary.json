@@ -1,0 +1,11 @@
+{
+  "input_file": "outputs/stage2_variable_construction/au9999_analysis_dataset.csv",
+  "training_observations": 3664,
+  "n_sim": 2000,
+  "block_length": 20,
+  "seed": 12345,
+  "empirical_mean_distance": 12.784378,
+  "any_statistic_outside_95_null_band": false,
+  "conclusion": "avoidance NOT distinguishable from mechanical null",
+  "report": "outputs/stage4_roundnumber_avoidance_test/roundnumber_avoidance_test_report.md"
+}
