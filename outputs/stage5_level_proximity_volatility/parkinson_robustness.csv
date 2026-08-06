@@ -1,0 +1,9 @@
+﻿sample,near_threshold_yuan,n_days_near,mean_abs_return_after_near,mean_abs_return_after_far,statistic_near_minus_far,null_median,null_p2.5,null_p97.5,empirical_percentile_in_null,two_sided_p,outside_95_null_band
+analysis_as_is,2.0,246,0.007101,0.007276,-0.000175,-2.6e-05,-0.000983,0.001461,39.6,0.7916,False
+analysis_as_is,3.0,365,0.007444,0.007244,0.000199,2e-06,-0.000902,0.001272,64.8,0.7046,False
+analysis_as_is,5.0,631,0.007268,0.007264,4e-06,4e-06,-0.000825,0.001029,49.9,0.9975,False
+analysis_as_is,10.0,1394,0.007334,0.007222,0.000112,-6e-06,-0.000771,0.000787,62.1,0.7586,False
+extreme_dates_reinstated,2.0,246,0.007101,0.007339,-0.000238,-4.2e-05,-0.001033,0.001648,36.6,0.7326,False
+extreme_dates_reinstated,3.0,365,0.007444,0.00731,0.000134,7e-06,-0.000987,0.001433,59.3,0.8146,False
+extreme_dates_reinstated,5.0,631,0.007268,0.007335,-6.7e-05,1e-06,-0.000889,0.001128,44.6,0.8926,False
+extreme_dates_reinstated,10.0,1394,0.007486,0.007223,0.000264,-1.2e-05,-0.000831,0.000883,74.3,0.5147,False

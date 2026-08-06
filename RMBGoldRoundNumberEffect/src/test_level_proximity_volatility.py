@@ -1,9 +1,10 @@
 """Stage 5: does proximity to a round 50-level predict next-day volatility?
 
 This is the single pre-committed confirmatory test of the support/resistance
-hypothesis, after the occupancy question (Stage 4) and a descriptive support/
-resistance look both came back null. It is deliberately the ONLY dynamics test
-we run, to avoid data-dredging across many variants.
+hypothesis, run after the occupancy question (Stage 4) and the descriptive
+distance-distribution look (Stage 3) both returned nothing significant. It is
+deliberately the ONLY dynamics test we run, to avoid data-dredging across many
+variants.
 
 Question (no look-ahead): is today's absolute log-return systematically larger
 or smaller when YESTERDAY's close sat near a 50-level?
@@ -23,6 +24,7 @@ no regressions, trading rules, or further variants. Input is read only.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +38,7 @@ except ModuleNotFoundError:  # pragma: no cover
     plt = None
 
 from levels import distance_to_level
+from test_roundnumber_avoidance import draw_block_bootstrap
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -44,6 +47,14 @@ WORKSPACE_ROOT = PROJECT_ROOT.parent
 DEFAULT_INPUT = (
     WORKSPACE_ROOT / "outputs" / "stage2_variable_construction" / "au9999_analysis_dataset.csv"
 )
+# Pre-exclusion Stage 2 variables (all dates present); used only for the Parkinson
+# robustness variant (b), which reinstates the two extreme-intraday-range dates.
+STAGE2_VARIABLES = (
+    WORKSPACE_ROOT / "outputs" / "stage2_variable_construction" / "au9999_research_variables_stage2.csv"
+)
+# Dropped in build_analysis_dataset for having no genuine trading record; kept out of
+# variant (b) too (only the extreme-range dates are reinstated there).
+PLACEHOLDER_DATES = frozenset({"2012-01-03", "2013-01-03"})
 DEFAULT_OUTPUT_DIR = WORKSPACE_ROOT / "outputs" / "stage5_level_proximity_volatility"
 
 TRAIN_START = pd.Timestamp("2006-01-01")
@@ -140,6 +151,93 @@ def two_sided_p(sim: np.ndarray, obs: float) -> float:
     return float(min(1.0, 2.0 * min(ge + 1, le + 1) / (B + 1)))
 
 
+def load_prox_sample(source: Path, exclude_dates: frozenset) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return (closes, prior-day distance column, parkinson_volatility) for the training
+    window, dropping ``exclude_dates`` and non-positive closes. Used by the Parkinson
+    robustness check so it can vary the excluded set without touching the primary loader.
+    """
+    df = pd.read_csv(source)
+    df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
+    for col in ("close_price", "distance_to_level", "parkinson_volatility"):
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.sort_values("trade_date")
+    date_str = df["trade_date"].dt.strftime("%Y-%m-%d")
+    mask = (df["trade_date"] >= TRAIN_START) & (df["trade_date"] <= TRAIN_END) & (~date_str.isin(exclude_dates))
+    closes = df.loc[mask, "close_price"].to_numpy(float)
+    dist = df.loc[mask, "distance_to_level"].to_numpy(float)
+    park = df.loc[mask, "parkinson_volatility"].to_numpy(float)
+    keep = np.isfinite(closes) & (closes > 0)
+    return closes[keep], dist[keep], park[keep]
+
+
+def null_stats_outcome(prior_dist: np.ndarray, outcome: np.ndarray, thr: float) -> np.ndarray:
+    """Same near-minus-far null as null_stats, but with an arbitrary per-day outcome carried
+    through the block bootstrap (here Parkinson volatility) instead of the path's own return.
+    """
+    near = prior_dist <= thr
+    cnt_near = near.sum(1)
+    cnt_far = (~near).sum(1)
+    sum_near = np.where(near, outcome, 0.0).sum(1)
+    sum_far = np.where(~near, outcome, 0.0).sum(1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        stat = sum_near / cnt_near - sum_far / cnt_far
+    stat[(cnt_near == 0) | (cnt_far == 0)] = np.nan
+    return stat
+
+
+def parkinson_table(closes: np.ndarray, dist_col: np.ndarray, park: np.ndarray, cfg: Config) -> pd.DataFrame:
+    """near-minus-far table with parkinson_volatility as the outcome. Same grouping, block
+    bootstrap, seed and thresholds as the primary test; the block-start draws are identical, so
+    Parkinson and returns are resampled through the same blocks (returns build the prior distance,
+    Parkinson is the outcome carried along). Column structure matches the primary statistics file.
+    """
+    n = len(closes)
+    returns = np.diff(np.log(closes))
+    prior_dist_real = dist_col[:-1]          # yesterday's distance
+    park_real = park[1:]                     # today's Parkinson volatility
+
+    # Same block bootstrap / seed as the primary null: fresh generators seeded identically draw
+    # the same block-start array, so returns and Parkinson are resampled through the same blocks.
+    sampled_ret, _ = draw_block_bootstrap(returns, n - 1, cfg.n_sim, cfg.block_length, np.random.default_rng(cfg.seed))
+    sampled_park, _ = draw_block_bootstrap(park[1:], n - 1, cfg.n_sim, cfg.block_length, np.random.default_rng(cfg.seed))
+    log_prices = np.log(float(closes[0])) + np.cumsum(sampled_ret, axis=1)
+    prices = np.concatenate([np.full((cfg.n_sim, 1), float(closes[0])), np.exp(log_prices)], axis=1)
+    prior_dist_null = distance_to_level(prices[:, :-1])
+
+    rows = []
+    for thr in NEAR_THRESHOLDS:
+        stat, mn, mf, n_near = near_minus_far(prior_dist_real, park_real, thr)
+        sim = null_stats_outcome(prior_dist_null, sampled_park, thr)
+        lo, med, hi = np.nanpercentile(sim, [2.5, 50, 97.5])
+        rows.append({
+            "near_threshold_yuan": thr,
+            "n_days_near": n_near,
+            "mean_abs_return_after_near": round(mn, 6),
+            "mean_abs_return_after_far": round(mf, 6),
+            "statistic_near_minus_far": round(stat, 6),
+            "null_median": round(float(med), 6),
+            "null_p2.5": round(float(lo), 6),
+            "null_p97.5": round(float(hi), 6),
+            "empirical_percentile_in_null": round(float(np.nanmean(sim < stat) * 100), 1),
+            "two_sided_p": round(two_sided_p(sim, stat), 4),
+            "outside_95_null_band": bool(stat < lo or stat > hi),
+        })
+    return pd.DataFrame(rows)
+
+
+def run_parkinson_robustness(cfg: Config) -> pd.DataFrame:
+    """Parkinson robustness for both samples: (a) the analysis sample as used by the primary
+    test, and (b) the same sample with the two extreme-intraday-range dates reinstated.
+    """
+    ca, da, pa = load_prox_sample(cfg.source, frozenset())
+    cb, db, pb = load_prox_sample(STAGE2_VARIABLES, PLACEHOLDER_DATES)
+    table_a = parkinson_table(ca, da, pa, cfg)
+    table_a.insert(0, "sample", "analysis_as_is")
+    table_b = parkinson_table(cb, db, pb, cfg)
+    table_b.insert(0, "sample", "extreme_dates_reinstated")
+    return pd.concat([table_a, table_b], ignore_index=True)
+
+
 def run(cfg: Config) -> dict:
     if not cfg.source.exists():
         raise FileNotFoundError(f"Working dataset not found: {cfg.source}")
@@ -187,7 +285,12 @@ def run(cfg: Config) -> dict:
 
     plot_path = save_plot(null_by_thr, table, cfg.output_dir) if plt is not None else None
     table.to_csv(cfg.output_dir / "level_proximity_volatility_stats.csv", index=False, encoding="utf-8-sig")
-    report_path = write_report(cfg, n, table, plot_path)
+
+    # Post-hoc Parkinson robustness (separate file; primary outputs above are untouched).
+    parkinson = run_parkinson_robustness(cfg)
+    parkinson.to_csv(cfg.output_dir / "parkinson_robustness.csv", index=False, encoding="utf-8-sig")
+
+    report_path = write_report(cfg, n, table, parkinson, plot_path)
 
     any_out = bool(table["outside_95_null_band"].any())
     summary = {
@@ -242,7 +345,17 @@ def md(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def write_report(cfg: Config, n: int, table: pd.DataFrame, plot_path: Path | None) -> Path:
+def _stage4_mean_distance_null_median() -> float:
+    """Read Stage 4's null median for mean_distance from its output file (not hardcoded)."""
+    path = WORKSPACE_ROOT / "outputs" / "stage4_roundnumber_avoidance_test" / "statistic_comparison.csv"
+    with open(path, encoding="utf-8-sig") as handle:
+        for stat_row in csv.DictReader(handle):
+            if stat_row["statistic"] == "mean_distance":
+                return float(stat_row["null_median"])
+    return float("nan")
+
+
+def write_report(cfg: Config, n: int, table: pd.DataFrame, parkinson: pd.DataFrame, plot_path: Path | None) -> Path:
     out = cfg.output_dir / "level_proximity_volatility_report.md"
     headline = table[table["near_threshold_yuan"] == 5.0].iloc[0]
     verdict = (
@@ -252,14 +365,104 @@ def write_report(cfg: Config, n: int, table: pd.DataFrame, plot_path: Path | Non
         "OUTSIDE the null band -> a link survives the mechanical null; inspect and confirm out-of-sample."
     )
     plot_line = f"![Null distribution]({plot_path.name})\n" if plot_path else "_Plot unavailable._\n"
+
+    # --- Documentation values, read from the already-computed tables (no new stats). ---
+    stat5 = float(headline["statistic_near_minus_far"])
+    far5 = float(headline["mean_abs_return_after_far"])
+    lo5 = float(headline["null_p2.5"])
+    hi5 = float(headline["null_p97.5"])
+    med5 = float(headline["null_median"])
+    se5 = (hi5 - lo5) / (2 * 1.96)
+    mde = 2.8 * se5
+    mde_pct = mde / far5 * 100.0
+    obs_pct = stat5 / far5 * 100.0
+    stage4_median = _stage4_mean_distance_null_median()
+
+    power_section = (
+        "## Power\n\n"
+        f"For the pre-specified headline (Distance <= 5), SE = (null_p97.5 - null_p2.5) / (2 * 1.96) = "
+        f"{se5:.6f}. The minimum detectable effect at 80% power is MDE = 2.8 * SE = {mde:.6f}, which is "
+        f"{mde_pct:.1f}% of the far-group mean |return| ({far5:.6f}).\n\n"
+        "The MDE exceeds the band edge because the observed statistic is itself random: an effect "
+        "sitting exactly on the boundary is detected only about half the time. The 2.8 factor is 1.96 "
+        "(to clear the band) plus 0.84 (for an 80% detection rate).\n\n"
+        f"The observed effect is {stat5:.6f}, or {obs_pct:.1f}% of the far-group mean, against an MDE of "
+        f"{mde_pct:.1f}%. The observed effect is a fraction of what this design can reliably resolve, so "
+        "the null rules out large effects and is uninformative about effects of the magnitude typically "
+        "reported in the round-number literature."
+    )
+
+    null_median_section = (
+        "## What the null median is\n\n"
+        f"The null median for the main threshold is {med5:.6f}, approximately zero. Each of the "
+        f"{cfg.n_sim:,} no-effect simulated paths is split by prior-day distance and the same "
+        "near-minus-far subtraction is performed, giving 2,000 differences from worlds where the true "
+        "answer is zero; their median is the value above.\n\n"
+        "It matters because a grouping procedure can manufacture a difference from nothing -- splitting "
+        "on the contemporaneous close instead of the prior close would do exactly that, because the "
+        "grouping variable and the outcome would then share a price. A null median at approximately zero "
+        "is empirical evidence, on the real return series, that the lagged design introduces no "
+        "mechanical bias.\n\n"
+        f"Contrast Stage 4, whose null median for mean distance is {stage4_median:.6f}, not the "
+        "theoretical uniform 12.5 -- a real mechanical bias in that statistic. You cannot know which "
+        "case applies without simulating, which is why the null median is reported in both stages."
+    )
+
+    pk_a = parkinson[parkinson["sample"] == "analysis_as_is"]
+    pk_b = parkinson[parkinson["sample"] == "extreme_dates_reinstated"]
+    pk5_a = pk_a[pk_a["near_threshold_yuan"] == 5.0].iloc[0]
+    pk5_b = pk_b[pk_b["near_threshold_yuan"] == 5.0].iloc[0]
+    agree = bool((pk_a["outside_95_null_band"].values == pk_b["outside_95_null_band"].values).all())
+    any_pk_outside = bool(parkinson["outside_95_null_band"].any())
+    agree_clause = (
+        "agree at every threshold" if agree else "do NOT agree at every threshold"
+    ) + (
+        ", and in both the statistic stays inside the null band" if agree and not any_pk_outside else ""
+    )
+    parkinson_section = (
+        "## Parkinson volatility (post-hoc robustness)\n\n"
+        "- `abs_log_return` is the pre-specified primary measure; Parkinson volatility is a post-hoc "
+        "robustness check added during review, reported here regardless of outcome.\n"
+        "- Parkinson is roughly 5x more efficient at estimating volatility from the same number of days, "
+        "because it uses the daily high and low rather than a single closing price.\n"
+        "- Parkinson is the measure more closely aligned with the hypothesised mechanism: an intraday "
+        "rejection at a level shows up in the range but can be nearly invisible in the close-to-close "
+        "move.\n"
+        "- Against that, `close` comes from a closing auction with substantial volume behind it, while "
+        "`high` and `low` can be set by a single fill -- which is why the more robust close-to-close "
+        "measure was chosen as primary.\n"
+        "- Reported on two samples: (a) the analysis sample as used by the primary test, and (b) the same "
+        "sample with the two extreme-intraday-range dates (2016-03-01, 2021-12-28) reinstated, because "
+        "excluding days for extreme range and then using range as the outcome would truncate the "
+        "dependent variable. 2021-12-28 is outside the 2006-2020 training window, so only 2016-03-01 "
+        "actually re-enters; the two samples differ by one day.\n\n"
+        f"{md(parkinson)}\n\n"
+        "In this file the `mean_abs_return_after_*` columns hold Parkinson volatility (the column "
+        "structure matches the primary statistics file). At the headline threshold, (a) gives statistic "
+        f"{pk5_a['statistic_near_minus_far']} (band {pk5_a['null_p2.5']} to {pk5_a['null_p97.5']}) and (b) "
+        f"gives {pk5_b['statistic_near_minus_far']} (band {pk5_b['null_p2.5']} to {pk5_b['null_p97.5']}). "
+        f"The two samples {agree_clause}. Full results are in `parkinson_robustness.csv`."
+    )
+
+    one_finding_section = (
+        "## Stages 4 and 5 are one finding, not two\n\n"
+        "Stage 4 found prices spend slightly less time near levels; Stage 5 finds volatility slightly "
+        "higher after a near close. These fit a single mechanism -- higher volatility near a level causes "
+        "faster escape and therefore lower occupancy. That coherence is exactly why they do not "
+        "corroborate each other: if the volatility effect were real and large it would mechanically "
+        "produce the occupancy effect. The two results must be described as one finding observed from two "
+        "angles, not as two independent tests both failing to reject."
+    )
+
     report = f"""# Stage 5: Level-Proximity and Next-Day Volatility
 
 ## Scope
 
 Single pre-committed confirmatory test of support/resistance, run after the
-occupancy test (Stage 4) and a descriptive support/resistance look both came back
-null. Training window {TRAIN_START.date()} to {TRAIN_END.date()}; 2021+ held out.
-One statistic, one null model, no further variants (to avoid data-dredging).
+occupancy test (Stage 4) and the descriptive distance-distribution look (Stage 3)
+both returned nothing significant. Training window {TRAIN_START.date()} to
+{TRAIN_END.date()}; 2021+ held out. One primary statistic, one null model, one main
+threshold fixed in advance (to avoid data-dredging).
 
 ## Question
 
@@ -295,6 +498,14 @@ deliberate, making the two stages a controlled comparison.
 ## Interpretation
 
 {verdict}
+
+{null_median_section}
+
+{power_section}
+
+{parkinson_section}
+
+{one_finding_section}
 
 ## Caveats
 

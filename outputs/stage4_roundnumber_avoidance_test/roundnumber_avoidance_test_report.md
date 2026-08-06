@@ -109,6 +109,10 @@ The MDE exceeds the band half-width because the observed statistic is itself ran
 
 Near-level occupancy would have to fall to roughly 0.0775 (a drop of about 61% from the null median) before this design could reliably detect it. So the null result rules out large effects but is uninformative about effects of the magnitude typically reported in the round-number literature.
 
+## Stages 4 and 5 are one finding, not two
+
+Stage 4 (here) found prices spend slightly less time near levels; Stage 5 finds volatility slightly higher after a near close. These fit a single mechanism -- higher volatility near a level causes faster escape and therefore lower occupancy. That coherence is exactly why they do not corroborate each other: if the volatility effect were real and large it would mechanically produce the occupancy effect. The two results must be described as one finding observed from two angles, not as two independent tests both failing to reject.
+
 ## Caveats
 
 - A single empirical path is compared to a null band; this is a parametric-style

@@ -381,6 +381,15 @@ def write_report(config: Config, train: pd.DataFrame, null: dict, stat_table: pd
         "null result rules out large effects but is uninformative about effects of the magnitude "
         "typically reported in the round-number literature."
     )
+    one_finding_section = (
+        "## Stages 4 and 5 are one finding, not two\n\n"
+        "Stage 4 (here) found prices spend slightly less time near levels; Stage 5 finds volatility "
+        "slightly higher after a near close. These fit a single mechanism -- higher volatility near a "
+        "level causes faster escape and therefore lower occupancy. That coherence is exactly why they do "
+        "not corroborate each other: if the volatility effect were real and large it would mechanically "
+        "produce the occupancy effect. The two results must be described as one finding observed from two "
+        "angles, not as two independent tests both failing to reject."
+    )
     report = f"""# Stage 4: Round-Number Avoidance Test
 
 ## Scope
@@ -437,6 +446,8 @@ distribution (50 = dead centre). `outside_95_null_band` is the decision flag.
 {null_centre_section}
 
 {power_section}
+
+{one_finding_section}
 
 ## Caveats
 
