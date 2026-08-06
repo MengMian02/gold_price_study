@@ -1,0 +1,5 @@
+date,rule,disposition,reason,reviewer,decided_on
+2012-01-03,placeholder_no_trade,exclude,no genuine trading record (placeholder row),LJH,2026-08-05
+2013-01-03,placeholder_no_trade,exclude,no genuine trading record (placeholder row),LJH,2026-08-05
+2016-03-01,extreme_intraday_range,exclude,price matches the source but the extreme intraday low is not a market-wide move (no corresponding news); suspected erroneous fill,LJH,2026-08-05
+2021-12-28,extreme_intraday_range,exclude,price matches the source but the extreme intraday low is not a market-wide move (no corresponding news); suspected erroneous fill,LJH,2026-08-05

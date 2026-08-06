@@ -8,6 +8,7 @@ conclusions. The input CSV is never overwritten.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 WORKSPACE_ROOT = PROJECT_ROOT.parent
 DEFAULT_SOURCE = PROJECT_ROOT / "data" / "raw" / "Au9999.csv"
 DEFAULT_OUTPUT_DIR = WORKSPACE_ROOT / "outputs" / "stage2_variable_construction"
+STAGE1_MANIFEST = WORKSPACE_ROOT / "outputs" / "stage1_data_audit" / "source_manifest.json"
 
 DATE_COL = "date"
 OPEN_COL = "open"
@@ -77,6 +79,79 @@ def main() -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_source_against_manifest(source: Path) -> None:
+    """Gate: the file Stage 1 audited must be the file this stage analyses.
+
+    Stage 1 records the SHA-256 of the audited file in source_manifest.json. If it
+    exists and disagrees with the file read here, the audited and analysed data
+    have diverged and we refuse to run. If it is absent (e.g. a first-time user
+    who has not run Stage 1 yet), we warn and continue.
+    """
+    if not STAGE1_MANIFEST.exists():
+        print(
+            "WARNING: Stage 1 source_manifest.json not found; skipping the source-hash gate. "
+            "Run audit_sina_au9999.py first to enable it."
+        )
+        return
+    manifest = json.loads(STAGE1_MANIFEST.read_text(encoding="utf-8"))
+    audited_hash = manifest.get("sha256")
+    current_hash = _sha256_file(source)
+    if audited_hash != current_hash:
+        raise ValueError(
+            "Source-hash gate failed: the file audited by Stage 1 differs from the file being analysed.\n"
+            f"  Stage 1 audited : {manifest.get('path')}  sha256={audited_hash}\n"
+            f"  Stage 2 reads   : {source}  sha256={current_hash}\n"
+            "Re-run Stage 1 on the same file before constructing variables."
+        )
+
+
+def run_input_gates(raw: pd.DataFrame, source: Path) -> None:
+    """Refuse to run on data that is wrong without needing any external information.
+
+    These are gates, not decisions: duplicate dates, out-of-order dates, and OHLC
+    bracket violations can be judged wrong from the file alone, so Stage 2 stops
+    rather than silently constructing variables on broken data. (Phase 1
+    diagnostics confirmed the current file has none of these.) Judgement calls
+    that need information outside the file are recorded in data/decisions.csv and
+    applied later, not gated here.
+    """
+    parsed = pd.to_datetime(raw[DATE_COL], errors="coerce", dayfirst=True)
+
+    duplicated = parsed.duplicated(keep=False) & parsed.notna()
+    if duplicated.any():
+        dates = sorted(parsed[duplicated].dt.strftime("%Y-%m-%d").unique())
+        raise ValueError(f"Input gate failed: duplicate dates present in the raw file: {dates}")
+
+    valid = parsed.dropna()
+    if len(valid) > 1 and not valid.is_monotonic_increasing:
+        raise ValueError("Input gate failed: raw file dates are not in ascending order.")
+
+    open_ = pd.to_numeric(raw[OPEN_COL].replace("", pd.NA), errors="coerce")
+    high = pd.to_numeric(raw[HIGH_COL].replace("", pd.NA), errors="coerce")
+    low = pd.to_numeric(raw[LOW_COL].replace("", pd.NA), errors="coerce")
+    close = pd.to_numeric(raw[CLOSE_COL].replace("", pd.NA), errors="coerce")
+    complete = open_.notna() & high.notna() & low.notna() & close.notna()
+    bracket_ok = (high >= low) & (low <= open_) & (open_ <= high) & (low <= close) & (close <= high)
+    bad = complete & ~bracket_ok
+    if bad.any():
+        rows = (np.nonzero(bad.to_numpy())[0] + 2).tolist()
+        shown = rows[:20]
+        raise ValueError(
+            "Input gate failed: OHLC bracket violated (need low<=open<=high, low<=close<=high, high>=low) at "
+            f"CSV rows {shown}" + (" ..." if len(rows) > len(shown) else "")
+        )
+
+    verify_source_against_manifest(source)
+
+
 def construct_and_save(config: Config) -> dict:
     if not config.source.exists():
         raise FileNotFoundError(f"Input file not found: {config.source}")
@@ -85,6 +160,8 @@ def construct_and_save(config: Config) -> dict:
     missing_columns = [col for col in REQUIRED_COLUMNS if col not in raw.columns]
     if missing_columns:
         raise ValueError(f"Required columns missing: {missing_columns}")
+
+    run_input_gates(raw, config.source)
 
     original_row_count = len(raw)
     df = raw.copy()
