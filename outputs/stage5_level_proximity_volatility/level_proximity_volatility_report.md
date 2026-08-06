@@ -20,6 +20,13 @@ seed 12345). Return sizes are unlinked from price level, so any real link
 shows as the statistic escaping the null band. The null also captures any purely
 mechanical bias (its median need not be zero).
 
+Seed 12345 is shared with Stage 4 (`test_roundnumber_avoidance.py`): the two
+stages draw the same block-start array from the same return series, so their null
+paths are bit-identical. Each test is individually valid -- the shared paths are a
+valid sample from the null -- but the two results are NOT independent and must not be
+described as two independent tests both failing to reject. The alignment is
+deliberate, making the two stages a controlled comparison.
+
 ## Result
 
 - Training observations: 3,664

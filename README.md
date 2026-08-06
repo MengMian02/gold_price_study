@@ -84,6 +84,20 @@ the formulas, so a genuine bug trips them.
 - `outputs/stage5_level_proximity_volatility/` — next-day-volatility-test results
 - `RESEARCH_REPORT.md` — concise research write-up
 
+## Known limitations and possible refinements
+
+**Additive level grid against multiplicative price dynamics.** Levels are spaced every
+50 RMB, a fixed additive grid, while the null resamples log returns, which are
+multiplicative. Over the training window the price roughly tripled, so a 50-RMB gap
+falls from about 33% of price at 150 to about 11% at 440. The price sweeps across levels
+far more quickly in the later years, and the pooled 14-year statistic is weighted toward
+that period rather than being a uniform average over the sample.
+
+If a round-number effect exists only where the grid is coarse relative to daily moves,
+pooling would obscure it. The natural refinement is to repeat the analysis split by price
+band (for example 150–250, 250–350, 350–450) and check whether the conclusion holds
+within each. This has not been done.
+
 ## Scope and status
 
 Training window: 2006–2020. Observations from 2021 onward were held out and were not

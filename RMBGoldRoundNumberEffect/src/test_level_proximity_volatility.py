@@ -58,6 +58,10 @@ class Config:
     output_dir: Path = DEFAULT_OUTPUT_DIR
     n_sim: int = 2000
     block_length: int = 20
+    # Deliberately the same seed as Stage 4 (test_roundnumber_avoidance.py): identical seed,
+    # return series, and block-start array shape mean this stage's null paths are bit-identical
+    # to Stage 4's. Do not change either seed -- the alignment makes the two stages a controlled
+    # comparison, not two independent tests. The two results are therefore NOT independent.
     seed: int = 12345
 
 
@@ -269,6 +273,13 @@ Block bootstrap of daily log-returns (block {cfg.block_length}, {cfg.n_sim} sims
 seed {cfg.seed}). Return sizes are unlinked from price level, so any real link
 shows as the statistic escaping the null band. The null also captures any purely
 mechanical bias (its median need not be zero).
+
+Seed {cfg.seed} is shared with Stage 4 (`test_roundnumber_avoidance.py`): the two
+stages draw the same block-start array from the same return series, so their null
+paths are bit-identical. Each test is individually valid -- the shared paths are a
+valid sample from the null -- but the two results are NOT independent and must not be
+described as two independent tests both failing to reject. The alignment is
+deliberate, making the two stages a controlled comparison.
 
 ## Result
 

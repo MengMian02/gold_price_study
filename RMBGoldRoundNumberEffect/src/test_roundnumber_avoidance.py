@@ -58,7 +58,17 @@ class Config:
     source: Path = DEFAULT_INPUT
     output_dir: Path = DEFAULT_OUTPUT_DIR
     n_sim: int = 2000
+    # Block length controls how much return autocorrelation the null preserves, and is not
+    # critical here: gold returns are close to white noise, and the persistence in the
+    # distance series comes from np.cumsum integrating returns into a price LEVEL -- that
+    # persistence is reproduced regardless of block ordering, so block length has little to
+    # grip on. The block-length sweep (5/20/50/100) in
+    # outputs/stage4_roundnumber_avoidance_test/sensitivity_analysis.md bears this out.
     block_length: int = 20
+    # Deliberately shared with Stage 5 (test_level_proximity_volatility.py): identical seed,
+    # return series, and block-start array shape mean Stage 5's null paths are bit-identical
+    # to this stage's. Do not change either seed -- the alignment makes the two stages a
+    # controlled comparison rather than two independent tests that both fail to reject.
     seed: int = 12345
 
 
@@ -106,24 +116,46 @@ def empirical_stats(distances: np.ndarray) -> dict:
     return stats
 
 
+def draw_block_bootstrap(series: np.ndarray, n_needed: int, n_sim: int, block_length: int, rng) -> tuple[np.ndarray, int]:
+    """Moving-block bootstrap: draw ``n_sim`` resampled series of length ``n_needed`` from
+    ``series`` using the supplied ``rng``. Returns (sampled, effective_block_length).
+
+    This is the shared bootstrap engine used by the Stage 4 null and by
+    sensitivity_roundnumber_null.py, so both resample identically rather than reimplementing
+    the block logic.
+    """
+    n = len(series)
+    L = min(block_length, n)
+    n_blocks = int(np.ceil(n_needed / L))
+    starts = rng.integers(0, n - L + 1, size=(n_sim, n_blocks))
+    offsets = np.arange(L)
+    idx = (starts[:, :, None] + offsets[None, None, :]).reshape(n_sim, n_blocks * L)[:, :n_needed]
+    return series[idx], L
+
+
+def build_null_paths(
+    returns: np.ndarray, start_price: float, n_close: int, n_sim: int, block_length: int, seed: int, rng=None
+) -> tuple[np.ndarray, int]:
+    """Build ``n_sim`` no-preference price paths of length ``n_close`` by moving-block bootstrap
+    of log returns, starting from ``start_price``. Returns (prices, effective_block_length).
+
+    Shared by the Stage 4 test and the sensitivity analysis so the paths are identical for the
+    same inputs. Pass an ``rng`` to continue an existing random stream; otherwise one is seeded.
+    """
+    if rng is None:
+        rng = np.random.default_rng(seed)
+    sampled, L = draw_block_bootstrap(returns, n_close - 1, n_sim, block_length, rng)
+    log_prices = np.log(start_price) + np.cumsum(sampled, axis=1)
+    prices = np.concatenate([np.full((n_sim, 1), start_price), np.exp(log_prices)], axis=1)  # (n_sim, n_close)
+    return prices, L
+
+
 def simulate_null(returns: np.ndarray, start_price: float, n_close: int, config: Config) -> dict:
     """Moving-block bootstrap of log returns -> synthetic distance distributions."""
-    rng = np.random.default_rng(config.seed)
-    n_ret = len(returns)
-    L = min(config.block_length, n_ret)
-    n_needed = n_close - 1  # returns needed to build n_close prices from a fixed start
-    n_blocks = int(np.ceil(n_needed / L))
-
+    prices, L = build_null_paths(
+        returns, start_price, n_close, config.n_sim, config.block_length, config.seed
+    )
     B = config.n_sim
-    starts = rng.integers(0, n_ret - L + 1, size=(B, n_blocks))
-    offsets = np.arange(L)
-    idx = (starts[:, :, None] + offsets[None, None, :]).reshape(B, n_blocks * L)[:, :n_needed]
-    sampled = returns[idx]  # (B, n_needed)
-
-    log_start = np.log(start_price)
-    log_prices = log_start + np.cumsum(sampled, axis=1)
-    prices = np.exp(log_prices)
-    prices = np.concatenate([np.full((B, 1), start_price), prices], axis=1)  # (B, n_close)
 
     dist = distance_to_level(prices)
 
@@ -258,6 +290,97 @@ def interpret(stat_table: pd.DataFrame, bin_band: pd.DataFrame) -> str:
 def write_report(config: Config, train: pd.DataFrame, null: dict, stat_table: pd.DataFrame, bin_band: pd.DataFrame, plot_path: Path | None) -> Path:
     out = config.output_dir / "roundnumber_avoidance_test_report.md"
     plot_line = f"![Empirical vs null band]({plot_path.name})\n" if plot_path else "_Plot unavailable (matplotlib not installed)._\n"
+
+    # --- Documentation values, all read from the already-computed stat_table (no new stats). ---
+    n_obs = len(train)
+    mean_row = stat_table[stat_table["statistic"] == "mean_distance"].iloc[0]
+    emp_mean = float(mean_row["empirical"])
+    null_med = float(mean_row["null_median"])
+    null_lo = float(mean_row["null_p2.5"])
+    null_hi = float(mean_row["null_p97.5"])
+    half_window = LEVEL_STEP / 2.0                    # distance lives in [0, half_window]
+    uniform_mean = half_window / 2.0                  # 12.5 under an iid uniform null
+    uniform_se = float(np.sqrt((half_window ** 2 / 12.0) / n_obs))  # SE of the mean, iid U(0,25)
+    null_se = (null_hi - null_lo) / (2 * 1.96)
+    z_uniform = (emp_mean - uniform_mean) / uniform_se
+    z_null = (emp_mean - null_med) / null_se
+    centre_table = pd.DataFrame(
+        [
+            {
+                "reference": "uniform iid benchmark",
+                "centre": round(uniform_mean, 4),
+                "lower_95": round(uniform_mean - 1.96 * uniform_se, 4),
+                "upper_95": round(uniform_mean + 1.96 * uniform_se, 4),
+                "obs_minus_centre": round(emp_mean - uniform_mean, 4),
+                "SE_from_centre": round(z_uniform, 2),
+            },
+            {
+                "reference": "bootstrap null (simulation)",
+                "centre": round(null_med, 4),
+                "lower_95": round(null_lo, 4),
+                "upper_95": round(null_hi, 4),
+                "obs_minus_centre": round(emp_mean - null_med, 4),
+                "SE_from_centre": round(z_null, 2),
+            },
+        ]
+    )
+    main_thr = 5.0
+    prop5_row = stat_table[stat_table["statistic"] == f"prop_distance_le_{main_thr}"].iloc[0]
+    p5_med = float(prop5_row["null_median"])
+    p5_lo = float(prop5_row["null_p2.5"])
+    p5_hi = float(prop5_row["null_p97.5"])
+    se5 = (p5_hi - p5_lo) / (2 * 1.96)
+    mde = 2.8 * se5
+    mde_pct = mde / p5_med * 100.0
+    detect_floor = p5_med - mde
+
+    seed_note = (
+        f"- Seed {config.seed} is shared with Stage 5 (`test_level_proximity_volatility.py`): both "
+        "stages draw the same block-start array from the same return series, so their null paths "
+        "are bit-identical. Each test is individually valid -- the shared paths are a valid sample "
+        "from the null -- but the two results are NOT independent and must not be described as two "
+        "independent tests both failing to reject; sharing paths makes the two stages a deliberately "
+        "controlled comparison."
+    )
+    nested_note = (
+        "The four `prop_distance_le_*` rows are nested: every observation counted at 2 is also "
+        "counted at 3, 5, and 10. They are cumulative slices of one distribution, so any shift moves "
+        "all four together -- the progression across thresholds is one number reported four times, "
+        "not four independent signals agreeing. `main_near_threshold = 5` was fixed in advance and is "
+        "the pre-specified headline; the 2, 3, and 10 rows are robustness checks and must not be read "
+        "as corroboration."
+    )
+    null_centre_section = (
+        "## Why the null centre is not 12.5\n\n"
+        "The 2,000 simulated paths have zero round-number preference by construction: the resampling "
+        "never consults the price level, so no path can prefer or avoid a level. Their median "
+        f"mean-distance is nevertheless {null_med:.4f}, below the uniform 12.5.\n\n"
+        "So \"mean distance differs from 12.5, therefore prices avoid round numbers\" is false: a "
+        "provably-no-effect world already fails to produce 12.5. Uniformity is what infinitely many "
+        "independent draws would give; one persistent 14-year path crossing roughly 133 levels gives "
+        f"something else, and individual null paths span a wide range ({null_lo:.4f} to {null_hi:.4f} "
+        "at 95%).\n\n"
+        f"{md_table(centre_table)}\n\n"
+        f"The observed mean distance sits {z_uniform:.2f} SE from the uniform centre but only "
+        f"{z_null:.2f} SE from the bootstrap-null centre. The raw deviation from the centre is "
+        f"actually larger against the correct null ({abs(emp_mean - null_med):.4f} vs "
+        f"{abs(emp_mean - uniform_mean):.4f}), yet it is not significant. What changes the conclusion "
+        f"is the band width (null SE {null_se:.4f} vs uniform SE {uniform_se:.4f}), not the centre."
+    )
+    power_section = (
+        "## Power\n\n"
+        "For the pre-specified headline (Distance <= 5), the null band implies a standard error "
+        f"SE = (p97.5 - p2.5) / (2 * 1.96) = {se5:.4f}. The minimum detectable effect at 80% power is "
+        f"MDE = 2.8 * SE = {mde:.4f}, which is {mde_pct:.1f}% of the null median occupancy "
+        f"({p5_med:.4f}).\n\n"
+        "The MDE exceeds the band half-width because the observed statistic is itself random: an "
+        "effect sitting exactly on the band edge is detected only about half the time. The 2.8 factor "
+        "is 1.96 (to clear the band) plus 0.84 (for an 80% detection rate).\n\n"
+        f"Near-level occupancy would have to fall to roughly {detect_floor:.4f} (a drop of about "
+        f"{mde_pct:.0f}% from the null median) before this design could reliably detect it. So the "
+        "null result rules out large effects but is uninformative about effects of the magnitude "
+        "typically reported in the round-number literature."
+    )
     report = f"""# Stage 4: Round-Number Avoidance Test
 
 ## Scope
@@ -283,6 +406,7 @@ compares the empirical distance distribution to a Monte Carlo null.
 - Block length: {null['block_length']} trading days (preserves short-run
   autocorrelation and fat tails while breaking any price-level/return link).
 - Simulations: {null['n_sim']}. Seed: {config.seed} (reproducible).
+{seed_note}
 
 ## Input
 
@@ -297,6 +421,8 @@ compares the empirical distance distribution to a Monte Carlo null.
 `empirical_percentile_in_null` is where the empirical value sits within the null
 distribution (50 = dead centre). `outside_95_null_band` is the decision flag.
 
+{nested_note}
+
 ## Per-Bin Empirical vs Null Band
 
 {md_table(bin_band)}
@@ -307,6 +433,10 @@ distribution (50 = dead centre). `outside_95_null_band` is the decision flag.
 ## Interpretation
 
 {interpret(stat_table, bin_band)}
+
+{null_centre_section}
+
+{power_section}
 
 ## Caveats
 
