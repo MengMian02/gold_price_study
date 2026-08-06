@@ -43,7 +43,7 @@ from test_roundnumber_avoidance import draw_block_bootstrap
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-WORKSPACE_ROOT = PROJECT_ROOT.parent
+WORKSPACE_ROOT = PROJECT_ROOT
 DEFAULT_INPUT = (
     WORKSPACE_ROOT / "outputs" / "stage2_variable_construction" / "au9999_analysis_dataset.csv"
 )

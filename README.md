@@ -91,4 +91,4 @@ Stage 1 detects and reports; it never deletes, corrects, or filters. Disposition
 
 ## Reproduction
 
-Data is not redistributed. Obtain Au99.99 daily OHLC from a source whose terms permit your use, place it at `data/raw/Au9999.csv`, and run the stages in order. The raw series spans 2002–2026; the confirmatory analysis uses the 3,664 trading days from 2006-01-01 to 2020-12-31, with four dates flagged as unreliable excluded and data from 2021 onward held out and not used in any test.
+Data is not redistributed. Obtain Au99.99 daily OHLC from a source whose terms permit your use, place it at `data/raw/Au9999.csv` (expected columns: `date`, `open`, `high`, `low`, `close`), and run the stages in order. The raw series spans 2002–2026; the confirmatory analysis uses the 3,664 trading days from 2006-01-01 to 2020-12-31, with four dates flagged as unreliable excluded and data from 2021 onward held out and not used in any test.

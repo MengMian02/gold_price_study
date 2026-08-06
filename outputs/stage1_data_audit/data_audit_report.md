@@ -9,10 +9,10 @@ Disposition of any finding (keep, exclude, set-nan) is recorded separately in
 
 ## Source and Provenance
 
-- Source file used: `RMBGoldRoundNumberEffect/data/raw/Au9999.csv`
+- Source file used: `data/raw/Au9999.csv`
 - SHA-256: `77e01ca0a9a5e35106c66cc2fc3b9c7e67ba22807c9b2cf2a7f9a8d05dba9540`
 - Size (bytes): 236353
-- Notes: Requested filename Au9999_Sina_Daily_OHLCV.csv was not found; using actual file RMBGoldRoundNumberEffect/data/raw/Au9999.csv.
+- Notes: Requested filename Au9999_Sina_Daily_OHLCV.csv was not found; using actual file data/raw/Au9999.csv.
 - Rows: 5788
 - Columns: date, open, high, low, close, volume_kg
 - Expected columns: date, open, high, low, close, volume_kg

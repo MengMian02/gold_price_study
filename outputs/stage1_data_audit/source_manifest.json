@@ -1,7 +1,7 @@
 {
-  "path": "RMBGoldRoundNumberEffect/data/raw/Au9999.csv",
+  "path": "data/raw/Au9999.csv",
   "sha256": "77e01ca0a9a5e35106c66cc2fc3b9c7e67ba22807c9b2cf2a7f9a8d05dba9540",
   "bytes": 236353,
   "n_rows": 5788,
-  "audit_run_utc": "2026-08-06T01:54:34Z"
+  "audit_run_utc": "2026-08-06T09:17:52Z"
 }

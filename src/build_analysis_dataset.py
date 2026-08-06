@@ -27,7 +27,7 @@ import pandas as pd
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-WORKSPACE_ROOT = PROJECT_ROOT.parent
+WORKSPACE_ROOT = PROJECT_ROOT
 DEFAULT_INPUT = (
     WORKSPACE_ROOT / "outputs" / "stage2_variable_construction" / "au9999_research_variables_stage2.csv"
 )

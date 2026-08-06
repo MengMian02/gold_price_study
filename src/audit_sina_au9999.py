@@ -23,7 +23,7 @@ import pandas as pd
 EXPECTED_COLUMNS = ["date", "open", "high", "low", "close", "volume_kg"]
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-WORKSPACE_ROOT = PROJECT_ROOT.parent
+WORKSPACE_ROOT = PROJECT_ROOT
 DECISIONS_FILE = PROJECT_ROOT / "data" / "decisions.csv"
 DECISION_COLUMNS = ["date", "rule", "disposition", "reason", "reviewer", "decided_on"]
 DEFAULT_CANDIDATES = [

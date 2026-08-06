@@ -3,16 +3,13 @@ work/
 .venv/
 __pycache__/
 *.pyc
-RMBGoldRoundNumberEffect/legacy_june_output/
-RMBGoldRoundNumberEffect/.venv/
-RMBGoldRoundNumberEffect/__pycache__/
 
 # Local OS/editor noise
 .DS_Store
 Thumbs.db
 
 # Source data is not redistributed.
-RMBGoldRoundNumberEffect/data/raw/
+data/raw/
 
 # Row-level and diagnostic outputs may reproduce source observations.
 outputs/stage1_data_audit/

@@ -1,6 +1,6 @@
 # Stage 1 Diagnostics (Phase 1)
 
-- Source file: `RMBGoldRoundNumberEffect/data/raw/Au9999.csv`
+- Source file: `data/raw/Au9999.csv`
 - Rows (excluding header): 5788
 - Date range: 2002-10-30 to 2026-07-28
 

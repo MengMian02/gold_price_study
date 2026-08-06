@@ -13,7 +13,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for minimal runtimes.
 from PIL import Image, ImageDraw, ImageFont
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 INPUT_FILE = PROJECT_ROOT / "outputs" / "stage2_variable_construction" / (
     "au9999_analysis_dataset.csv"
 )

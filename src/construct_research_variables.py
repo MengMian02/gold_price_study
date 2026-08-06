@@ -21,7 +21,7 @@ from levels import distance_to_level, round_half_up_to_step
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-WORKSPACE_ROOT = PROJECT_ROOT.parent
+WORKSPACE_ROOT = PROJECT_ROOT
 DEFAULT_SOURCE = PROJECT_ROOT / "data" / "raw" / "Au9999.csv"
 DEFAULT_OUTPUT_DIR = WORKSPACE_ROOT / "outputs" / "stage2_variable_construction"
 STAGE1_MANIFEST = WORKSPACE_ROOT / "outputs" / "stage1_data_audit" / "source_manifest.json"
