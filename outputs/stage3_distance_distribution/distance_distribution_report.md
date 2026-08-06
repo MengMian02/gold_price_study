@@ -1,5 +1,12 @@
 # Training Sample Distance Distribution
 
+The uniform line is a visual benchmark, not a formal maintained null hypothesis.
+
+- The uniform reference assumes independent observations, which this series does not satisfy: the distance series is highly persistent and the nearest level changes only about 133 times across 3,664 days.
+- Deviations from the uniform line must not be read as evidence of a round-number effect.
+- The correct null is constructed in Stage 4 by moving-block bootstrap, and its centre is not the uniform value.
+- Stage 3 is descriptive only: it measures the distribution; Stage 4 supplies the standard of comparison.
+
 ## Scope
 
 - Input file: `outputs/stage2_variable_construction/au9999_analysis_dataset.csv`
@@ -14,7 +21,7 @@
 - Actual end date: 2020-12-31
 - Observations: 3,664
 - Valid Distance observations: 3,664
-- Theoretical Distance range check, 0 to 25 yuan: 通过
+- Theoretical Distance range check, 0 to 25 yuan: pass
 
 ## Distance Formula
 
@@ -78,12 +85,9 @@ This script uses transparent half-up rounding: when a close is exactly at the mi
 
 ![Distance histogram](distance_histogram.png)
 
-![Distance density](distance_density_0_25.png)
-
 ## Direct Visual Reading
 
 - Main near definition, Distance <= 5: 631 observations, 17.22% of the training sample.
 - Uniform visual reference for Distance <= 5 is 20.00%; actual minus reference is -2.78%.
-- Near area reading: 直观上低于均匀参考下的 20%。
-- This is exploratory description only. The uniform line is a visual benchmark, not a formal maintained null hypothesis.
+- This is exploratory description only.
 - Based on this chart/table alone, do not claim a round-number effect, support/resistance, or tradable regularity.

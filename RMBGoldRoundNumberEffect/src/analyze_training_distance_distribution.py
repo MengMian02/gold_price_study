@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 import numpy as np
@@ -123,46 +122,6 @@ def save_histogram(train: pd.DataFrame) -> Path:
     return out
 
 
-def gaussian_kernel_density(values: np.ndarray, grid: np.ndarray) -> np.ndarray:
-    values = values[np.isfinite(values)]
-    n = len(values)
-    if n == 0:
-        return np.full_like(grid, np.nan, dtype=float)
-    std = np.std(values, ddof=1)
-    bandwidth = 1.06 * std * (n ** (-1 / 5)) if std > 0 else 1.0
-    bandwidth = max(float(bandwidth), 0.3)
-    z = (grid[:, None] - values[None, :]) / bandwidth
-    density = np.exp(-0.5 * z * z).sum(axis=1) / (n * bandwidth * math.sqrt(2 * math.pi))
-    return density
-
-
-def save_density_plot(train: pd.DataFrame) -> Path:
-    out = OUTPUT_DIR / "distance_density_0_25.png"
-    distance = train["distance_recomputed"].dropna().to_numpy()
-    grid = np.linspace(0, 25, 300)
-    density = gaussian_kernel_density(distance, grid)
-    uniform_density = 1 / 25
-
-    if plt is None:
-        save_density_with_pillow(grid, density, uniform_density, out)
-        return out
-
-    fig, ax = plt.subplots(figsize=(9, 5.2))
-    ax.plot(grid, density, color="#D95F02", linewidth=2.0, label="Empirical density")
-    ax.axhline(uniform_density, color="#333333", linestyle="--", linewidth=1.2, label="Uniform visual reference")
-    ax.fill_between(grid, density, alpha=0.18, color="#D95F02")
-    ax.set_title("Training Sample Distance Density, 0 to 25 RMB")
-    ax.set_xlabel("Distance to nearest 50 RMB level (yuan)")
-    ax.set_ylabel("Density")
-    ax.set_xlim(0, 25)
-    ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False)
-    fig.tight_layout()
-    fig.savefig(out, dpi=160)
-    plt.close(fig)
-    return out
-
-
 def get_font(size: int = 16) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = [
         "C:/Windows/Fonts/arial.ttf",
@@ -219,57 +178,6 @@ def save_histogram_with_pillow(train: pd.DataFrame, out: Path) -> None:
     image.save(out)
 
 
-def save_density_with_pillow(grid: np.ndarray, density: np.ndarray, uniform_density: float, out: Path) -> None:
-    width, height = 1200, 720
-    margin_left, margin_right, margin_top, margin_bottom = 95, 45, 70, 95
-    plot_w = width - margin_left - margin_right
-    plot_h = height - margin_top - margin_bottom
-    image = Image.new("RGB", (width, height), "white")
-    draw = ImageDraw.Draw(image)
-    font = get_font(18)
-    small = get_font(14)
-    title = get_font(24)
-
-    ymax = float(np.nanmax([np.nanmax(density), uniform_density]) * 1.12)
-    ymax = ymax if ymax > 0 else 0.1
-
-    def point(x_val: float, y_val: float) -> tuple[int, int]:
-        x = margin_left + int((x_val / 25) * plot_w)
-        y = margin_top + plot_h - int((y_val / ymax) * plot_h)
-        return x, y
-
-    draw.text((margin_left, 25), "Training Sample Distance Density, 0 to 25 RMB", fill="#111111", font=title)
-    draw.line((margin_left, margin_top, margin_left, margin_top + plot_h), fill="#333333", width=2)
-    draw.line((margin_left, margin_top + plot_h, margin_left + plot_w, margin_top + plot_h), fill="#333333", width=2)
-
-    for y_frac in np.linspace(0, 1, 6):
-        y = margin_top + plot_h - int(y_frac * plot_h)
-        val = y_frac * ymax
-        draw.line((margin_left, y, margin_left + plot_w, y), fill="#E6E6E6", width=1)
-        draw.text((18, y - 8), f"{val:.3f}", fill="#333333", font=small)
-
-    uniform_y = point(0, uniform_density)[1]
-    for x0 in range(margin_left, margin_left + plot_w, 16):
-        draw.line((x0, uniform_y, min(x0 + 8, margin_left + plot_w), uniform_y), fill="#333333", width=2)
-
-    density_points = [point(float(x), float(y)) for x, y in zip(grid, density)]
-    if len(density_points) > 1:
-        draw.line(density_points, fill="#D95F02", width=4)
-
-    for tick in [0, 5, 10, 15, 20, 25]:
-        x = margin_left + (tick / 25) * plot_w
-        draw.line((x, margin_top + plot_h, x, margin_top + plot_h + 6), fill="#333333", width=1)
-        draw.text((x - 8, margin_top + plot_h + 12), str(tick), fill="#333333", font=small)
-
-    draw.text((width // 2 - 185, height - 45), "Distance to nearest 50 RMB level (yuan)", fill="#111111", font=font)
-    draw.text((18, 36), "Density", fill="#111111", font=font)
-    draw.line((margin_left + 730, 45, margin_left + 790, 45), fill="#D95F02", width=4)
-    draw.text((margin_left + 800, 34), "Empirical density", fill="#111111", font=small)
-    draw.line((margin_left + 730, 68, margin_left + 790, 68), fill="#333333", width=2)
-    draw.text((margin_left + 800, 57), "Uniform visual reference", fill="#111111", font=small)
-    image.save(out)
-
-
 def format_pct(x: float) -> str:
     if pd.isna(x):
         return "NA"
@@ -308,7 +216,6 @@ def write_report(
     bins: pd.DataFrame,
     thresholds: pd.DataFrame,
     histogram_path: Path,
-    density_path: Path,
 ) -> Path:
     out = OUTPUT_DIR / "distance_distribution_report.md"
     valid_distance = train["distance_recomputed"].dropna()
@@ -318,19 +225,20 @@ def write_report(
     near5_row = thresholds.loc[thresholds["threshold_yuan"] == 5.0].iloc[0]
     near5_prop = near5_row["actual_proportion"]
     near5_diff = near5_row["actual_minus_uniform_reference"]
-    if near5_diff > 0.02:
-        near5_text = "直观上高于均匀参考下的 20%。"
-    elif near5_diff < -0.02:
-        near5_text = "直观上低于均匀参考下的 20%。"
-    else:
-        near5_text = "直观上接近均匀参考下的 20%，差异不大。"
 
     max_distance = valid_distance.max()
     min_distance = valid_distance.min()
-    range_check = "通过" if min_distance >= 0 and max_distance <= 25 else "未通过"
+    range_check = "pass" if min_distance >= 0 and max_distance <= 25 else "fail"
 
     lines = [
         "# Training Sample Distance Distribution",
+        "",
+        "The uniform line is a visual benchmark, not a formal maintained null hypothesis.",
+        "",
+        "- The uniform reference assumes independent observations, which this series does not satisfy: the distance series is highly persistent and the nearest level changes only about 133 times across 3,664 days.",
+        "- Deviations from the uniform line must not be read as evidence of a round-number effect.",
+        "- The correct null is constructed in Stage 4 by moving-block bootstrap, and its centre is not the uniform value.",
+        "- Stage 3 is descriptive only: it measures the distribution; Stage 4 supplies the standard of comparison.",
         "",
         "## Scope",
         "",
@@ -370,14 +278,11 @@ def write_report(
         "",
         f"![Distance histogram]({histogram_path.name})",
         "",
-        f"![Distance density]({density_path.name})",
-        "",
         "## Direct Visual Reading",
         "",
         f"- Main near definition, Distance <= 5: {int(near5_row['observation_count']):,} observations, {format_pct(near5_prop)} of the training sample.",
         f"- Uniform visual reference for Distance <= 5 is 20.00%; actual minus reference is {near5_diff:.2%}.",
-        f"- Near area reading: {near5_text}",
-        "- This is exploratory description only. The uniform line is a visual benchmark, not a formal maintained null hypothesis.",
+        "- This is exploratory description only.",
         "- Based on this chart/table alone, do not claim a round-number effect, support/resistance, or tradable regularity.",
     ]
     out.write_text("\n".join(lines), encoding="utf-8")
@@ -403,8 +308,7 @@ def main() -> None:
     thresholds.to_csv(thresholds_out, index=False, encoding="utf-8-sig")
 
     histogram_path = save_histogram(train)
-    density_path = save_density_plot(train)
-    report_path = write_report(train, description, bins, thresholds, histogram_path, density_path)
+    report_path = write_report(train, description, bins, thresholds, histogram_path)
 
     print(f"Input: {INPUT_FILE}")
     print(f"Training rows: {len(train)}")
