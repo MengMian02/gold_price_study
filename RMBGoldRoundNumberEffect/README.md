@@ -2,8 +2,7 @@
 
 Python source code for the exploratory study of round-number effects in
 RMB-denominated Au99.99 daily prices. See the repository-level
-[README](../README.md) and [research report](../RESEARCH_REPORT.md) for the question,
-results, limitations, and full run order.
+[README](../README.md) for the question, results, limitations, and full run order.
 
 ## Local input
 
