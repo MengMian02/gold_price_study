@@ -35,6 +35,8 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     plt = None
 
+from levels import distance_to_level
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
@@ -47,7 +49,7 @@ DEFAULT_OUTPUT_DIR = WORKSPACE_ROOT / "outputs" / "stage5_level_proximity_volati
 TRAIN_START = pd.Timestamp("2006-01-01")
 TRAIN_END = pd.Timestamp("2020-12-31")
 LEVEL_STEP = 50.0
-NEAR_THRESHOLDS = (2.0, 5.0)   # headline = 5.0; 2.0 is a robustness variant
+NEAR_THRESHOLDS = (2.0, 3.0, 5.0, 10.0)   # headline = 5.0; 2.0/3.0/10.0 are robustness variants
 
 
 @dataclass
@@ -78,19 +80,17 @@ def repository_relative(path: Path) -> str:
     except ValueError:
         return path.name
 
-def distance_to_level(prices: np.ndarray) -> np.ndarray:
-    nearest = np.floor(prices / LEVEL_STEP + 0.5) * LEVEL_STEP
-    return np.abs(prices - nearest)
-
-
-def load_training_closes(source: Path) -> np.ndarray:
+def load_training_closes(source: Path) -> tuple[np.ndarray, np.ndarray]:
     df = pd.read_csv(source)
     df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
     df["close_price"] = pd.to_numeric(df["close_price"], errors="coerce")
+    df["distance_to_level"] = pd.to_numeric(df["distance_to_level"], errors="coerce")
     df = df.sort_values("trade_date")
     m = (df["trade_date"] >= TRAIN_START) & (df["trade_date"] <= TRAIN_END)
     closes = df.loc[m, "close_price"].to_numpy(float)
-    return closes[np.isfinite(closes) & (closes > 0)]
+    dist_col = df.loc[m, "distance_to_level"].to_numpy(float)
+    keep = np.isfinite(closes) & (closes > 0)
+    return closes[keep], dist_col[keep]
 
 
 def near_minus_far(prior_dist: np.ndarray, abs_ret: np.ndarray, thr: float) -> tuple[float, float, float, int]:
@@ -142,11 +142,20 @@ def run(cfg: Config) -> dict:
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(cfg.seed)
 
-    closes = load_training_closes(cfg.source)
+    closes, dist_col = load_training_closes(cfg.source)
     n = len(closes)
     returns = np.diff(np.log(closes))
-    prior_dist_real = distance_to_level(closes[:-1])
+    # Real-data prior-day distance is READ from the Stage 2 distance_to_level
+    # column, aligned to yesterday's close; only the simulated paths recompute it.
+    prior_dist_real = dist_col[:-1]
     abs_ret_real = np.abs(returns)
+
+    # The interpretability of the whole null hinges on prior_dist_real being
+    # YESTERDAY's distance (closes[:-1]), not today's (closes[1:]). Using the
+    # contemporaneous close would drop high-volatility days that jumped in from far
+    # away into the "near" group, diluting any real effect toward null.
+    assert len(prior_dist_real) == len(abs_ret_real)
+    assert np.isclose(prior_dist_real[0], distance_to_level(closes[0]))
 
     paths = make_paths(returns, float(closes[0]), n, cfg, rng)
 

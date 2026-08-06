@@ -35,9 +35,9 @@ compares the empirical distance distribution to a Monte Carlo null.
 | statistic | empirical | null_median | null_p2.5 | null_p97.5 | empirical_percentile_in_null | two_sided_p | outside_95_null_band |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | mean_distance | 12.784378 | 12.416983 | 10.458997 | 14.455598 | 65.5 | 0.6907 | False |
-| prop_distance_le_2.5 | 0.081878 | 0.10071 | 0.055131 | 0.152572 | 20.5 | 0.4198 | False |
+| prop_distance_le_2.0 | 0.06714 | 0.079967 | 0.042849 | 0.12309 | 22.8 | 0.4628 | False |
+| prop_distance_le_3.0 | 0.099618 | 0.120906 | 0.067413 | 0.180411 | 21.1 | 0.4288 | False |
 | prop_distance_le_5.0 | 0.172216 | 0.201146 | 0.119808 | 0.292856 | 22.4 | 0.4518 | False |
-| prop_distance_le_7.5 | 0.271015 | 0.30131 | 0.197591 | 0.416492 | 27.0 | 0.5467 | False |
 | prop_distance_le_10.0 | 0.380731 | 0.402566 | 0.282983 | 0.526754 | 34.2 | 0.6857 | False |
 
 `empirical_percentile_in_null` is where the empirical value sits within the null

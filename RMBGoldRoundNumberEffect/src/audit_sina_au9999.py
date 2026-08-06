@@ -24,6 +24,8 @@ EXPECTED_COLUMNS = ["date", "open", "high", "low", "close", "volume_kg"]
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 WORKSPACE_ROOT = PROJECT_ROOT.parent
+DECISIONS_FILE = PROJECT_ROOT / "data" / "decisions.csv"
+DECISION_COLUMNS = ["date", "rule", "disposition", "reason", "reviewer", "decided_on"]
 DEFAULT_CANDIDATES = [
     PROJECT_ROOT / "data" / "raw" / "Au9999_Sina_Daily_OHLCV.csv",
     PROJECT_ROOT / "data" / "raw" / "Au9999.csv",
@@ -369,6 +371,39 @@ def write_source_manifest(summary: dict, output_dir: Path) -> Path:
     return manifest_path
 
 
+def write_pending_review(anomalies_df: pd.DataFrame, output_dir: Path) -> Path:
+    """Write the review queue: the (date, rule) flags the audit raised that have no
+    decision yet in data/decisions.csv, with blank judgement columns for a reviewer
+    to fill in and move into decisions.csv. Matching is by DATE, because a decision
+    adjudicates the whole trading day (build_analysis_dataset excludes by date, and a
+    date's recorded rule need not equal the audit rule that flagged it -- e.g. the two
+    placeholder dates are flagged weekday_gap but decided placeholder_no_trade).
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pending_path = output_dir / "pending_review.csv"
+
+    decided_dates: set[str] = set()
+    if DECISIONS_FILE.exists():
+        decisions = pd.read_csv(DECISIONS_FILE, dtype=str, keep_default_na=False)
+        if "date" in decisions.columns:
+            decided_dates = set(decisions["date"].astype(str))
+
+    if anomalies_df.empty or "parsed_date" not in anomalies_df.columns:
+        pending = pd.DataFrame(columns=DECISION_COLUMNS)
+    else:
+        flagged = anomalies_df.loc[:, ["parsed_date", "rule"]].copy()
+        flagged["date"] = pd.to_datetime(flagged["parsed_date"], errors="coerce").dt.strftime("%Y-%m-%d")
+        flagged = flagged.dropna(subset=["date"])
+        flagged = flagged[~flagged["date"].isin(decided_dates)]
+        flagged = flagged[["date", "rule"]].drop_duplicates().sort_values(["date", "rule"]).reset_index(drop=True)
+        for judgement_column in ("disposition", "reason", "reviewer", "decided_on"):
+            flagged[judgement_column] = ""
+        pending = flagged[DECISION_COLUMNS]
+
+    pending.to_csv(pending_path, index=False, encoding="utf-8-sig")
+    return pending_path
+
+
 def markdown_table(rows: list[dict], columns: list[str]) -> str:
     if not rows:
         return "_无_"
@@ -503,9 +538,11 @@ def main() -> None:
     _raw, anomalies_df, summary, _source = audit(config)
     report_path = write_report(summary, anomalies_df, config.output_dir)
     manifest_path = write_source_manifest(summary, config.output_dir)
+    pending_path = write_pending_review(anomalies_df, config.output_dir)
     print(f"Audit complete. Report: {report_path}")
     print(f"Anomaly table: {config.output_dir / 'data_audit_anomalies.csv'}")
     print(f"Source manifest: {manifest_path}")
+    print(f"Pending review: {pending_path}")
     print(f"Rows: {summary['rows']}; errors: {summary['error_rows_total']}; warnings: {summary['warning_rows_total']}")
 
 

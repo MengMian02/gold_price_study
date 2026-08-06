@@ -1,3 +1,5 @@
 ﻿near_threshold_yuan,n_days_near,mean_abs_return_after_near,mean_abs_return_after_far,statistic_near_minus_far,null_median,null_p2.5,null_p97.5,empirical_percentile_in_null,two_sided_p,outside_95_null_band
 2.0,246,0.007704,0.007331,0.000374,-1.2e-05,-0.00121,0.001987,68.7,0.6277,False
+3.0,365,0.00786,0.0073,0.00056,3e-06,-0.001138,0.001626,78.8,0.4258,False
 5.0,631,0.007848,0.007253,0.000595,5e-06,-0.001012,0.001413,84.0,0.3198,False
+10.0,1394,0.007798,0.007084,0.000714,6e-06,-0.000978,0.001035,91.5,0.1699,False

@@ -23,31 +23,24 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs" / "stage3_distance_distribution"
 TRAIN_START = pd.Timestamp("2006-01-01")
 TRAIN_END = pd.Timestamp("2020-12-31")
 LEVEL_STEP = 50.0
-NEAR_THRESHOLDS = [2.5, 5.0, 7.5, 10.0]
-
-
-def round_half_up_to_step(values: pd.Series, step: float) -> pd.Series:
-    scaled = values / step
-    return np.floor(scaled + 0.5) * step
+NEAR_THRESHOLDS = [2.0, 3.0, 5.0, 10.0]
 
 
 def load_training_sample() -> pd.DataFrame:
     df = pd.read_csv(INPUT_FILE)
-    required = {"trade_date", "close_price"}
+    required = {"trade_date", "distance_to_level"}
     missing = required.difference(df.columns)
     if missing:
         raise ValueError(f"Missing required columns: {sorted(missing)}")
 
     df = df.copy()
     df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
-    df["close_price"] = pd.to_numeric(df["close_price"], errors="coerce")
+    df["distance_to_level"] = pd.to_numeric(df["distance_to_level"], errors="coerce")
     df = df.sort_values("trade_date").reset_index(drop=True)
 
     train = df[(df["trade_date"] >= TRAIN_START) & (df["trade_date"] <= TRAIN_END)].copy()
-    train["nearest_50_level_recomputed"] = round_half_up_to_step(train["close_price"], LEVEL_STEP)
-    train["distance_recomputed"] = (
-        train["close_price"] - train["nearest_50_level_recomputed"]
-    ).abs()
+    # Read the distance-to-level column written by Stage 2 rather than recomputing it.
+    train["distance_recomputed"] = train["distance_to_level"]
     return train
 
 

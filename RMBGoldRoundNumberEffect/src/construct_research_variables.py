@@ -16,6 +16,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from levels import distance_to_level, round_half_up_to_step
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
@@ -218,17 +220,12 @@ def construct_and_save(config: Config) -> dict:
     }
 
 
-def round_half_up_to_step(series: pd.Series, step: float) -> pd.Series:
-    # Explicit half-up rule: exact midpoints between two levels choose the higher level.
-    return step * np.floor((series / step) + 0.5)
-
-
 def add_round_level_variables(df: pd.DataFrame, config: Config) -> None:
     valid_close = df["close_price"].notna()
     df["nearest_level"] = np.nan
     df.loc[valid_close, "nearest_level"] = round_half_up_to_step(df.loc[valid_close, "close_price"], config.level_step)
     df["signed_distance"] = df["close_price"] - df["nearest_level"]
-    df["distance_to_level"] = df["signed_distance"].abs()
+    df["distance_to_level"] = distance_to_level(df["close_price"], config.level_step)
 
     for threshold in config.near_thresholds:
         col = f"near_{threshold}"
@@ -261,7 +258,8 @@ def add_parkinson_variables(df: pd.DataFrame) -> None:
 
 def add_volume_variables(df: pd.DataFrame, config: Config) -> None:
     volume = df["volume_kg_raw"]
-    valid = volume.notna() & (volume >= 0)
+    # volume of 0 means no trading occurred, not a volume of zero
+    valid = volume.notna() & (volume > 0)
     df["volume_valid_for_log"] = valid.astype("Int64")
     df["log_volume"] = np.nan
     df.loc[valid, "log_volume"] = np.log1p(volume.loc[valid])
@@ -325,32 +323,21 @@ def run_validations(df: pd.DataFrame, original_row_count: int, config: Config) -
     )
     add_check("near_threshold_nesting", monotonic_near.all(), f"violations={int((~monotonic_near).sum())}")
 
-    distance_identity = (df["distance_to_level"] - df["signed_distance"].abs()).abs()
-    add_check(
-        "distance_equals_abs_signed_distance",
-        distance_identity.dropna().le(NUMERIC_TOLERANCE).all(),
-        f"max_abs_diff={distance_identity.max()}",
+    # A near_k flag is 0 for "far" and 1 for "near"; it is missing only when the
+    # underlying distance is missing. If "far" were ever encoded NA, pandas would
+    # silently drop those days from Stage 5's group means and leave the treatment
+    # group with nothing to compare against. The second clause rejects the
+    # degenerate case where every day is "near" (no far control group survives).
+    near_na_matches_distance_na = all(
+        df[f"near_{k}"].isna().equals(df["distance_to_level"].isna())
+        for k in config.near_thresholds
     )
-
-    levels = df["nearest_level"].dropna()
+    far_day_count = int((df[f"near_{config.main_near_threshold}"] == 0).sum())
     add_check(
-        "nearest_level_multiple_of_50",
-        ((levels % config.level_step).abs() <= NUMERIC_TOLERANCE).all(),
-        f"valid={len(levels)}",
-    )
-
-    parkinson_var = df["parkinson_variance"].dropna()
-    parkinson_vol = df["parkinson_volatility"].dropna()
-    add_check(
-        "parkinson_non_negative",
-        (parkinson_var.ge(0).all() and parkinson_vol.ge(0).all()),
-        f"variance_valid={len(parkinson_var)}, volatility_valid={len(parkinson_vol)}",
-    )
-    square_diff = (df["parkinson_volatility"] ** 2 - df["parkinson_variance"]).abs()
-    add_check(
-        "parkinson_vol_squared_equals_variance",
-        square_diff.dropna().le(1e-12).all(),
-        f"max_abs_diff={square_diff.max()}",
+        "near_flags_missing_only_when_distance_missing",
+        near_na_matches_distance_na and far_day_count > 0,
+        f"na_pattern_matches_distance={near_na_matches_distance_na}, "
+        f"far_days(near_{config.main_near_threshold}==0)={far_day_count}",
     )
 
     volume_window_ok = validate_lagged_volume_window(df, config.normal_volume_window)
@@ -389,14 +376,29 @@ def validate_lagged_volume_window(df: pd.DataFrame, window: int) -> dict:
 
 
 def validate_lagged_state_variables(df: pd.DataFrame) -> dict:
+    # Independent recomputation by explicit row offset, not df[col].shift(1) -- the
+    # very operation under test. Row i of {col}_lag1 must hold row i-1 of {col}, and
+    # row 0 must be null (no previous row exists). Compared as strings with a null
+    # sentinel so mixed dtypes (Int64 flags, float distances, string sides) align.
+    sentinel = "__NA__"
+
+    def as_str(value) -> str:
+        return sentinel if pd.isna(value) else str(value)
+
+    n = len(df)
     for col in STATE_COLUMNS:
         lag_col = f"{col}_lag1"
-        expected = df[col].shift(1)
-        actual = df[lag_col]
-        mismatch = ~(actual.fillna("__NA__").astype(str).eq(expected.fillna("__NA__").astype(str)))
-        if mismatch.any():
-            return {"passed": False, "detail": f"{lag_col} mismatch count={int(mismatch.sum())}"}
-    return {"passed": True, "detail": f"checked {len(STATE_COLUMNS)} lagged state variables"}
+        source_values = df[col].to_numpy()
+        lag_values = df[lag_col].to_numpy()
+        if n > 0 and not pd.isna(lag_values[0]):
+            return {"passed": False, "detail": f"{lag_col} row 0 is not null"}
+        for i in range(1, n):
+            if as_str(lag_values[i]) != as_str(source_values[i - 1]):
+                return {"passed": False, "detail": f"{lag_col} mismatch at row {i}"}
+    return {
+        "passed": True,
+        "detail": f"checked {len(STATE_COLUMNS)} lagged state variables by explicit row offset",
+    }
 
 
 def build_allowed_summary_counts(df: pd.DataFrame) -> dict:

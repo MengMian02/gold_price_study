@@ -61,6 +61,21 @@ The scripts use project-relative paths and fixed random seeds. Generated files a
 written under `outputs/`. Row-level outputs are intentionally ignored by Git and
 should remain local; aggregate Stage 3–5 results are retained for inspection.
 
+## Validation
+
+Stage 2 (`construct_research_variables.py`) runs an automated check suite on every
+execution and writes the results to
+`outputs/stage2_variable_construction/variable_construction_validation_report.md`.
+The checks test consequences of correct variable construction rather than restating
+the formulas, so a genuine bug trips them.
+
+- The strongest check, `volume_20d_baseline_lagged_no_current_or_future`, recomputes
+  the 20-day rolling volume baseline by explicit row slicing (t−1 back through t−20)
+  and asserts it matches the vectorised `.shift(1).rolling(20)` result — an automated
+  guard against look-ahead bias in variable construction.
+- Each check's pass/fail and detail are recorded in the report rather than raised, so
+  the artefacts always show which checks ran and what they found.
+
 ## Repository structure
 
 - `RMBGoldRoundNumberEffect/src/` — data audit, variable construction, and tests

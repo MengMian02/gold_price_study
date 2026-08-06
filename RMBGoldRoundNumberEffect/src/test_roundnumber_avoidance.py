@@ -35,6 +35,8 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     plt = None
 
+from levels import distance_to_level
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
@@ -48,7 +50,7 @@ TRAIN_START = pd.Timestamp("2006-01-01")
 TRAIN_END = pd.Timestamp("2020-12-31")
 LEVEL_STEP = 50.0
 HALF_STEP = LEVEL_STEP / 2.0
-NEAR_THRESHOLDS = [2.5, 5.0, 7.5, 10.0]
+NEAR_THRESHOLDS = [2.0, 3.0, 5.0, 10.0]
 
 
 @dataclass
@@ -78,11 +80,6 @@ def repository_relative(path: Path) -> str:
         return path.resolve().relative_to(WORKSPACE_ROOT.resolve()).as_posix()
     except ValueError:
         return path.name
-
-def distance_to_level(prices: np.ndarray) -> np.ndarray:
-    nearest = np.floor(prices / LEVEL_STEP + 0.5) * LEVEL_STEP
-    return np.abs(prices - nearest)
-
 
 def load_training_closes(source: Path) -> pd.DataFrame:
     df = pd.read_csv(source)
