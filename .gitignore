@@ -16,7 +16,6 @@ RMBGoldRoundNumberEffect/data/raw/
 
 # Row-level and diagnostic outputs may reproduce source observations.
 outputs/stage1_data_audit/
-outputs/stage2_5_anomaly_candidates/
 outputs/stage2_variable_construction/ANALYSIS_INPUT_NOTE.md
 outputs/stage2_variable_construction/analysis_dataset_manifest.json
 outputs/stage2_variable_construction/au9999_analysis_dataset.csv

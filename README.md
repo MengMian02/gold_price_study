@@ -82,8 +82,7 @@ Higher volatility near a level would cause faster escape from it, and therefore 
 |---|---|---|
 | 1 | `audit_sina_au9999.py` | Read-only data audit; flags anomalies for review |
 | 2 | `construct_research_variables.py` | Level distances, returns, volatility, lagged states |
-| 2.5 | `identify_stage2_5_anomaly_candidates.py` | Anomaly candidates for manual review |
-| 2.6 | `build_analysis_dataset.py` | Applies logged decisions; final dataset |
+| 2 (cont.) | `build_analysis_dataset.py` | Applies logged decisions; final dataset |
 | 3 | `analyze_training_distance_distribution.py` | Descriptive distance distribution |
 | 4 | `test_roundnumber_avoidance.py` | Occupancy test, block bootstrap |
 | 5 | `test_level_proximity_volatility.py` | Volatility test, pre-committed |
